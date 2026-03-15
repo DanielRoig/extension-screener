@@ -44,7 +44,9 @@ async function fetchNoncompliantCompanies(): Promise<void> {
     });
 
     localStorage.setItem("Noncompliant", JSON.stringify(noncompliantList));
-  } catch {}
+  } catch {
+    console.error("Error fetching noncompliant companies");
+  }
 }
 
 function getNoncompliantFromStorage(): NoncompliantList | null {

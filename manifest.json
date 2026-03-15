@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Screener LocalStorage Helper",
+  "name": "Screener Helper",
   "version": "1.0",
-  "description": "Añade celdas personalizadas con valores de localStorage en la tabla de adaytrading.com/screener",
+  "description": "Añade celdas personalizadas en la tabla de adaytrading.com/screener",
   "permissions": [
     "storage"
   ],
@@ -16,8 +16,8 @@
   "content_scripts": [
     {
       "matches": ["https://adaytrading.com/screener"],
-      "js": ["dist/noncompliant.service.js", "dist/content.js"],
-      "css": ["styles.css"],
+      "js": ["dist/noncompliant.service.js", "dist/index.js"],
+      "css": ["assets/styles.css"],
       "run_at": "document_end"
     }
   ],

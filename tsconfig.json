@@ -4,12 +4,12 @@
     "lib": ["ES2017", "DOM"],
     "module": "None",
     "outDir": "dist",
-    "rootDir": ".",
+    "rootDir": "src",
     "strict": true,
     "noImplicitAny": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
-  "include": ["background.ts", "noncompliant.service.ts", "content.ts"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules"]
 }
