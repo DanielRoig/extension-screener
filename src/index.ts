@@ -28,29 +28,28 @@ function procesarFilas(): void {
 
         let value = localStorage.getItem(name);
         let newValue = JSON.parse(value);
-        console.log(value);
         if (value === null) {
           const noncompliantDate = isNoncompliant(name);
           if (noncompliantDate) {
-            const deadline = new Date(noncompliantDate);
-            deadline.setDate(deadline.getDate() + 180);
+            const deadlineDate = new Date(noncompliantDate);
+            deadlineDate.setDate(deadlineDate.getDate() + 180);
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const daysRemaining = Math.ceil(
-              (deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+              (deadlineDate.getTime() - today.getTime()) /
+                (1000 * 60 * 60 * 24),
             );
-            const fmt = (d: Date): string =>
-              `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getFullYear()}`;
+
             newValue = {
-              Noti: fmt(new Date(noncompliantDate)),
-              Dead: fmt(deadline),
+              Noti: noncompliantDate,
+              Dead: deadlineDate,
               Remain: `${daysRemaining}`,
             };
           } else {
             newValue = {
-              Noti: "suu",
-              Dead: "suu",
-              Remain: "suu",
+              Noti: null,
+              Dead: null,
+              Remain: null,
             };
           }
           localStorage.setItem(name, JSON.stringify(newValue));
