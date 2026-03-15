@@ -1,19 +1,17 @@
-function addCell(fila: HTMLTableRowElement, valor: string): void {
+function addCell(
+  fila: HTMLTableRowElement,
+  valor: Record<string, unknown>,
+): void {
   const celda = document.createElement("td");
   celda.className = "cell100 column8-ch smallPadding";
 
-  try {
-    const data = JSON.parse(valor) as Record<string, unknown>;
-    const entries = Object.entries(data);
-    entries.forEach(([k, v], i) => {
-      celda.appendChild(document.createTextNode(`${k}: ${v}`));
-      if (i < entries.length - 1) {
-        celda.appendChild(document.createElement("br"));
-      }
-    });
-  } catch {
-    celda.textContent = valor;
-  }
+  const entries = Object.entries(valor);
+  entries.forEach(([k, v], i) => {
+    celda.appendChild(document.createTextNode(`${k}: ${v}`));
+    if (i < entries.length - 1) {
+      celda.appendChild(document.createElement("br"));
+    }
+  });
 
   fila.appendChild(celda);
 }
@@ -28,8 +26,10 @@ function procesarFilas(): void {
           return;
         }
 
-        let valor = localStorage.getItem(name);
-        if (valor === null) {
+        let value = localStorage.getItem(name);
+        let newValue = JSON.parse(value);
+        console.log(value);
+        if (value === null) {
           const noncompliantDate = isNoncompliant(name);
           if (noncompliantDate) {
             const deadline = new Date(noncompliantDate);
@@ -41,18 +41,22 @@ function procesarFilas(): void {
             );
             const fmt = (d: Date): string =>
               `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getFullYear()}`;
-            valor = JSON.stringify({
+            newValue = {
               Noti: fmt(new Date(noncompliantDate)),
               Dead: fmt(deadline),
-              Remain: `${daysRemaining} days`,
-            });
+              Remain: `${daysRemaining}`,
+            };
           } else {
-            valor = "{}";
+            newValue = {
+              Noti: "suu",
+              Dead: "suu",
+              Remain: "suu",
+            };
           }
-          localStorage.setItem(name, valor);
+          localStorage.setItem(name, JSON.stringify(newValue));
         }
 
-        addCell(fila, valor);
+        addCell(fila, newValue);
       }
     });
 }
