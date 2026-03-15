@@ -1,5 +1,5 @@
 function addCell(
-  fila: HTMLTableRowElement,
+  row: HTMLTableRowElement,
   valor: Record<string, unknown>,
 ): void {
   const celda = document.createElement("td");
@@ -13,15 +13,15 @@ function addCell(
     }
   });
 
-  fila.appendChild(celda);
+  row.appendChild(celda);
 }
 
-function procesarFilas(): void {
+function processRows(): void {
   document
     .querySelectorAll<HTMLTableRowElement>("#bodyTaulaChange tr")
-    .forEach((fila) => {
-      if (!fila.querySelector(".column8-ch")) {
-        const name = fila.getAttribute("name");
+    .forEach((row) => {
+      if (!row.querySelector(".column8-ch")) {
+        const name = row.getAttribute("name");
         if (!name) {
           return;
         }
@@ -55,7 +55,7 @@ function procesarFilas(): void {
           localStorage.setItem(name, JSON.stringify(newValue));
         }
 
-        addCell(fila, newValue);
+        addCell(row, newValue);
       }
     });
 }
@@ -63,10 +63,10 @@ function procesarFilas(): void {
 function startObserver(): void {
   const tabla = document.getElementById("bodyTaulaChange");
   if (tabla) {
-    const observador = new MutationObserver(procesarFilas);
+    const observador = new MutationObserver(processRows);
     observador.observe(tabla, { childList: true, subtree: true });
 
-    procesarFilas();
+    processRows();
   } else {
     setTimeout(startObserver, 2000);
   }
