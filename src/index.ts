@@ -60,7 +60,7 @@ function procesarFilas(): void {
     });
 }
 
-function iniciarObservador(): void {
+function startObserver(): void {
   const tabla = document.getElementById("bodyTaulaChange");
   if (tabla) {
     const observador = new MutationObserver(procesarFilas);
@@ -68,7 +68,7 @@ function iniciarObservador(): void {
 
     procesarFilas();
   } else {
-    setTimeout(iniciarObservador, 2000);
+    setTimeout(startObserver, 2000);
   }
 }
 
@@ -77,10 +77,10 @@ localStorage.clear();
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", async () => {
     await fetchNoncompliantCompanies();
-    iniciarObservador();
+    startObserver();
   });
 } else {
-  fetchNoncompliantCompanies().then(() => iniciarObservador());
+  fetchNoncompliantCompanies().then(() => startObserver());
 }
 
 let lastUrl: string = location.href;
@@ -89,7 +89,7 @@ new MutationObserver((): void => {
   if (url !== lastUrl) {
     lastUrl = url;
     if (url.includes("/screener")) {
-      setTimeout(iniciarObservador, 1000);
+      setTimeout(startObserver, 1000);
     }
   }
 }).observe(document, { subtree: true, childList: true });
