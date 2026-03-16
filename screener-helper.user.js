@@ -5,9 +5,9 @@
 // @description  Añade celdas personalizadas en la tabla de adaytrading.com/screener
 // @author       TU_NOMBRE
 // @match        https://adaytrading.com/screener
-// @grant        GM.xmlHttpRequest
-// @grant        GM.getValue
-// @grant        GM.setValue
+// @grant        GM_xmlhttpRequest
+// @grant        GM_setValue
+// @grant        GM_getValue
 // @connect      api.nasdaq.com
 // @run-at       document-end
 // @downloadURL  https://github.com/DanielRoig/extension-screener/raw/refs/heads/main/screener-helper.user.js
@@ -17,180 +17,213 @@
 (function () {
   "use strict";
 
-  // Constantes
-  const STORAGE_KEYS = {
-    NONCOMPLIANT: "Noncompliant",
-  };
+  // ----------------------------------------------------------------------
+  // Types (for clarity)
+  // ----------------------------------------------------------------------
+  /** @typedef {Record<string, string>} NoncompliantList */
 
-  // Función para obtener datos de Nasdaq usando la nueva API
-  async function fetchNoncompliantCompanies() {
-    try {
-      const response = await GM.xmlHttpRequest({
+  // ----------------------------------------------------------------------
+  // API fetch (replaces background.ts + chrome.runtime.sendMessage)
+  // ----------------------------------------------------------------------
+  /**
+   * Fetches the list of noncompliant companies from Nasdaq API.
+   * @returns {Promise<any>} The parsed JSON response.
+   */
+  function fetchNasdaqData() {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
         method: "GET",
         url: "https://api.nasdaq.com/api/quote/list-type-extended/listing?queryString=deficient",
-        responseType: "json",
-        onload: (res) => res,
-        onerror: (err) => {
-          throw new Error("Network error");
+        onload: function (res) {
+          if (res.status >= 200 && res.status < 300) {
+            try {
+              const data = JSON.parse(res.responseText);
+              resolve(data);
+            } catch (e) {
+              reject(new Error("Invalid JSON response"));
+            }
+          } else {
+            reject(new Error(`HTTP error! status: ${res.status}`));
+          }
+        },
+        onerror: function () {
+          reject(new Error("Network error"));
         },
       });
+    });
+  }
 
-      if (response.status >= 200 && response.status < 300) {
-        const data = response.response;
+  /**
+   * Parses a date string in "MM/DD/YYYY" format.
+   * @param {string} dateStr
+   * @returns {Date}
+   */
+  function parseNotificationDate(dateStr) {
+    const [month, day, year] = dateStr.split("/").map(Number);
+    return new Date(year, month - 1, day);
+  }
 
-        if (!data || !data.data) {
-          throw new Error("Invalid response format");
-        }
+  /**
+   * Fetches the noncompliant companies, builds a symbol→notificationDate map,
+   * and stores it in Tampermonkey storage under the key "Noncompliant".
+   * @returns {Promise<void>}
+   */
+  async function fetchNoncompliantCompanies() {
+    try {
+      const response = await fetchNasdaqData();
 
-        const noncompliantList = {};
+      // Extract the relevant part of the response
+      const rows = response?.data?.noncomplaintCompanyList?.rows;
+      if (!rows || !Array.isArray(rows)) {
+        console.warn("Unexpected API response structure");
+        return;
+      }
 
-        data.data.noncomplaintCompanyList.rows.forEach((row) => {
-          row.companies.forEach((company) => {
-            company.AffectedIssues.forEach((symbol) => {
-              noncompliantList[symbol] = company.NotificationDate;
-            });
+      /** @type {NoncompliantList} */
+      const noncompliantList = {};
+
+      rows.forEach((row) => {
+        const companies = row.companies;
+        if (!Array.isArray(companies)) return;
+        companies.forEach((company) => {
+          const affected = company.AffectedIssues;
+          if (!Array.isArray(affected)) return;
+          affected.forEach((symbol) => {
+            // Use ISO string for consistent storage
+            noncompliantList[symbol] = parseNotificationDate(
+              company.NotificationDate,
+            ).toISOString();
           });
         });
+      });
 
-        // Guardar usando la nueva API
-        await GM.setValue(STORAGE_KEYS.NONCOMPLIANT, noncompliantList);
-      } else {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      GM_setValue("Noncompliant", JSON.stringify(noncompliantList));
+    } catch (err) {
+      console.error("Error fetching noncompliant companies:", err);
+    }
+  }
+
+  /**
+   * Retrieves the noncompliant list from Tampermonkey storage.
+   * @returns {NoncompliantList|null}
+   */
+  function getNoncompliantFromStorage() {
+    const stored = GM_getValue("Noncompliant", null);
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch {
+        return null;
       }
-    } catch (error) {
-      console.error("Error fetching noncompliant companies:", error);
     }
+    return null;
   }
 
-  // Obtener datos del storage usando la nueva API
-  async function getNoncompliantFromStorage() {
-    try {
-      const stored = await GM.getValue(STORAGE_KEYS.NONCOMPLIANT, null);
-      return stored;
-    } catch (error) {
-      console.error("Error reading from storage:", error);
-      return null;
-    }
-  }
-
-  // Verificar si es noncompliant
-  async function isNoncompliant(symbol) {
-    const list = await getNoncompliantFromStorage();
+  /**
+   * Checks if a symbol is noncompliant and returns the notification date if so.
+   * @param {string} symbol
+   * @returns {Date|null}
+   */
+  function isNoncompliant(symbol) {
+    const list = getNoncompliantFromStorage();
     if (list && list[symbol]) {
       return new Date(list[symbol]);
     }
     return null;
   }
 
-  // Obtener valor de una acción específica
-  async function getStockValue(symbol) {
-    try {
-      return await GM.getValue(symbol, null);
-    } catch (error) {
-      console.error(`Error getting value for ${symbol}:`, error);
-      return null;
-    }
-  }
+  // ----------------------------------------------------------------------
+  // Table manipulation (based on index.ts)
+  // ----------------------------------------------------------------------
+  /**
+   * Adds a cell with the noncompliant info to a table row.
+   * @param {HTMLTableRowElement} row
+   * @param {Record<string, unknown>} data - Object with keys Noti, Dead, Remain
+   */
+  function addCell(row, data) {
+    const cell = document.createElement("td");
+    cell.className = "cell100 column8-ch smallPadding";
 
-  // Guardar valor de una acción específica
-  async function setStockValue(symbol, value) {
-    try {
-      await GM.setValue(symbol, value);
-    } catch (error) {
-      console.error(`Error setting value for ${symbol}:`, error);
-    }
-  }
-
-  // Añadir celda a la fila
-  function addCell(row, valor) {
-    const celda = document.createElement("td");
-    celda.className = "cell100 column8-ch smallPadding";
-
-    const entries = Object.entries(valor);
-    entries.forEach(([k, v], i) => {
-      celda.appendChild(document.createTextNode(`${k}: ${v}`));
-      if (i < entries.length - 1) {
-        celda.appendChild(document.createElement("br"));
+    const entries = Object.entries(data);
+    entries.forEach(([key, value], index) => {
+      cell.appendChild(document.createTextNode(`${key}: ${value}`));
+      if (index < entries.length - 1) {
+        cell.appendChild(document.createElement("br"));
       }
     });
 
-    row.appendChild(celda);
+    row.appendChild(cell);
   }
 
-  // Procesar filas (ahora async)
-  async function processRows() {
-    const rows = document.querySelectorAll("#bodyTaulaChange tr");
+  /**
+   * Processes all rows of the table with id "bodyTaulaChange".
+   * For each row, if it doesn't already have a column8-ch cell, it computes
+   * noncompliant data and appends it.
+   */
+  function processRows() {
+    const table = document.getElementById("bodyTaulaChange");
+    if (!table) return;
 
-    for (const row of rows) {
-      if (!row.querySelector(".column8-ch")) {
-        const name = row.getAttribute("name");
-        if (!name) {
-          continue;
-        }
+    const rows = table.querySelectorAll("tr");
+    rows.forEach((row) => {
+      // Avoid duplicate processing
+      if (row.querySelector(".column8-ch")) return;
 
-        let value = await getStockValue(name);
-        let newValue;
+      const symbol = row.getAttribute("name");
+      if (!symbol) return;
 
-        if (value === null) {
-          const noncompliantDate = await isNoncompliant(name);
-          if (noncompliantDate) {
-            const deadlineDate = new Date(noncompliantDate);
-            deadlineDate.setDate(deadlineDate.getDate() + 180);
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const daysRemaining = Math.ceil(
-              (deadlineDate.getTime() - today.getTime()) /
-                (1000 * 60 * 60 * 24),
-            );
+      const notifDate = isNoncompliant(symbol);
+      let data;
 
-            newValue = {
-              Noti: noncompliantDate.toISOString().split("T")[0],
-              Dead: deadlineDate.toISOString().split("T")[0],
-              Remain: `${daysRemaining}`,
-            };
-          } else {
-            newValue = {
-              Noti: null,
-              Dead: null,
-              Remain: null,
-            };
-          }
-          await setStockValue(name, newValue);
-        } else {
-          newValue = value;
-        }
+      if (notifDate) {
+        const deadline = new Date(notifDate);
+        deadline.setDate(deadline.getDate() + 180);
 
-        addCell(row, newValue);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const diffTime = deadline.getTime() - today.getTime();
+        const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        data = {
+          Noti: notifDate.toISOString().split("T")[0], // YYYY-MM-DD
+          Dead: deadline.toISOString().split("T")[0],
+          Remain: daysRemaining.toString(),
+        };
+      } else {
+        data = {
+          Noti: null,
+          Dead: null,
+          Remain: null,
+        };
       }
-    }
+
+      addCell(row, data);
+    });
   }
 
-  // Iniciar observer
+  /**
+   * Starts a MutationObserver on the table to handle dynamic content.
+   * Also runs an initial processing.
+   */
   function startObserver() {
-    const tabla = document.getElementById("bodyTaulaChange");
-    if (tabla) {
-      // Procesar filas iniciales
-      processRows().catch(console.error);
-
-      // Configurar observer para cambios futuros
-      const observador = new MutationObserver(() => {
-        processRows().catch(console.error);
-      });
-      observador.observe(tabla, { childList: true, subtree: true });
-    } else {
+    const table = document.getElementById("bodyTaulaChange");
+    if (!table) {
+      // Retry after a short delay if table not found
       setTimeout(startObserver, 2000);
+      return;
     }
+
+    const observer = new MutationObserver(processRows);
+    observer.observe(table, { childList: true, subtree: true });
+
+    // Initial processing
+    processRows();
   }
 
-  // Función para limpiar datos antiguos (opcional)
-  async function cleanupOldData() {
-    // Esta función requeriría listar todas las keys, lo cual no es posible
-    // directamente con la API de GM. Se puede implementar un sistema de
-    // limpieza basado en fechas si se guarda un timestamp.
-    console.log("Cleanup function - implement if needed");
-  }
-
-  // Inicialización
+  // ----------------------------------------------------------------------
+  // Initialization & URL change detection
+  // ----------------------------------------------------------------------
+  // Ensure the noncompliant list is fetched before we start observing
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", async () => {
       await fetchNoncompliantCompanies();
@@ -200,13 +233,14 @@
     fetchNoncompliantCompanies().then(() => startObserver());
   }
 
-  // Observer para cambios de URL (SPA)
+  // Detect URL changes (e.g., single-page app navigation) and restart if needed
   let lastUrl = location.href;
   new MutationObserver(() => {
     const url = location.href;
     if (url !== lastUrl) {
       lastUrl = url;
       if (url.includes("/screener")) {
+        // Give the new page a moment to render the table
         setTimeout(startObserver, 1000);
       }
     }
