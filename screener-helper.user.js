@@ -18,29 +18,10 @@
 
 (function () {
   "use strict";
-
-  // ----------------------------------------------------------------------
-  // Types (for clarity)
-  // ----------------------------------------------------------------------
-  /** @typedef {Record<string, string>} NoncompliantList */
-
-  // ----------------------------------------------------------------------
-  // Storage reset
-  // ----------------------------------------------------------------------
-  /**
-   * Clears all values stored by this script in Tampermonkey storage.
-   */
   function resetStorage() {
     GM_listValues().forEach((key) => GM_deleteValue(key));
   }
 
-  // ----------------------------------------------------------------------
-  // API fetch (replaces background.ts + chrome.runtime.sendMessage)
-  // ----------------------------------------------------------------------
-  /**
-   * Fetches the list of noncompliant companies from Nasdaq API.
-   * @returns {Promise<any>} The parsed JSON response.
-   */
   function fetchNasdaqData() {
     return new Promise((resolve, reject) => {
       GM_xmlhttpRequest({
@@ -65,33 +46,21 @@
     });
   }
 
-  /**
-   * Parses a date string in "MM/DD/YYYY" format.
-   * @param {string} dateStr
-   * @returns {Date}
-   */
   function parseNotificationDate(dateStr) {
     const [month, day, year] = dateStr.split("/").map(Number);
     return new Date(year, month - 1, day);
   }
 
-  /**
-   * Fetches the noncompliant companies, builds a symbol→notificationDate map,
-   * and stores it in Tampermonkey storage under the key "Noncompliant".
-   * @returns {Promise<void>}
-   */
   async function fetchNoncompliantCompanies() {
     try {
       const response = await fetchNasdaqData();
 
-      // Extract the relevant part of the response
       const rows = response?.data?.noncomplaintCompanyList?.rows;
       if (!rows || !Array.isArray(rows)) {
         console.warn("Unexpected API response structure");
         return;
       }
 
-      /** @type {NoncompliantList} */
       const noncompliantList = {};
 
       rows.forEach((row) => {
@@ -115,10 +84,6 @@
     }
   }
 
-  /**
-   * Retrieves the noncompliant list from Tampermonkey storage.
-   * @returns {NoncompliantList|null}
-   */
   function getNoncompliantFromStorage() {
     const stored = GM_getValue("Noncompliant", null);
     if (stored) {
@@ -131,11 +96,6 @@
     return null;
   }
 
-  /**
-   * Checks if a symbol is noncompliant and returns the notification date if so.
-   * @param {string} symbol
-   * @returns {Date|null}
-   */
   function isNoncompliant(symbol) {
     const list = getNoncompliantFromStorage();
     if (list && list[symbol]) {
@@ -144,14 +104,6 @@
     return null;
   }
 
-  // ----------------------------------------------------------------------
-  // Table manipulation (based on index.ts)
-  // ----------------------------------------------------------------------
-  /**
-   * Adds a cell with the noncompliant info to a table row.
-   * @param {HTMLTableRowElement} row
-   * @param {Record<string, unknown>} data - Object with keys Noti, Dead, Remain
-   */
   function addCell(row, data) {
     const cell = document.createElement("td");
     cell.className = "cell100 column8-ch smallPadding";
@@ -167,18 +119,12 @@
     row.appendChild(cell);
   }
 
-  /**
-   * Processes all rows of the table with id "bodyTaulaChange".
-   * For each row, if it doesn't already have a column8-ch cell, it computes
-   * noncompliant data and appends it.
-   */
   function processRows() {
     const table = document.getElementById("bodyTaulaChange");
     if (!table) return;
 
     const rows = table.querySelectorAll("tr");
     rows.forEach((row) => {
-      // Avoid duplicate processing
       if (row.querySelector(".column8-ch")) return;
 
       const symbol = row.getAttribute("name");
@@ -220,14 +166,9 @@
     });
   }
 
-  /**
-   * Starts a MutationObserver on the table to handle dynamic content.
-   * Also runs an initial processing.
-   */
   function startObserver() {
     const table = document.getElementById("bodyTaulaChange");
     if (!table) {
-      // Retry after a short delay if table not found
       setTimeout(startObserver, 2000);
       return;
     }
@@ -235,14 +176,9 @@
     const observer = new MutationObserver(processRows);
     observer.observe(table, { childList: true, subtree: true });
 
-    // Initial processing
     processRows();
   }
 
-  // ----------------------------------------------------------------------
-  // Initialization & URL change detection
-  // ----------------------------------------------------------------------
-  // Ensure the noncompliant list is fetched before we start observing
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", async () => {
       resetStorage();
@@ -254,14 +190,12 @@
     fetchNoncompliantCompanies().then(() => startObserver());
   }
 
-  // Detect URL changes (e.g., single-page app navigation) and restart if needed
   let lastUrl = location.href;
   new MutationObserver(() => {
     const url = location.href;
     if (url !== lastUrl) {
       lastUrl = url;
       if (url.includes("/screener")) {
-        // Give the new page a moment to render the table
         setTimeout(startObserver, 1000);
       }
     }
