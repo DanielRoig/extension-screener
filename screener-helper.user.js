@@ -3,7 +3,7 @@
 // @namespace    https://github.com/DanielRoig/screener-extension
 // @version      2.0
 // @description  Añade celdas personalizadas en la tabla de adaytrading.com/screener
-// @author       TU_NOMBRE
+// @author       Daniel Roig
 // @match        https://adaytrading.com/screener
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
@@ -70,7 +70,6 @@
           const affected = company.AffectedIssues;
           if (!Array.isArray(affected)) return;
           affected.forEach((symbol) => {
-            // Use ISO string for consistent storage
             noncompliantList[symbol] = parseNotificationDate(
               company.NotificationDate,
             ).toISOString();
@@ -119,6 +118,28 @@
     row.appendChild(cell);
   }
 
+  function addNoncompliant(symbol) {
+    const notifDate = isNoncompliant(symbol);
+    if (notifDate) {
+      console.log("Symbol:", symbol, "Notification Date:", notifDate);
+      const deadline = new Date(notifDate);
+      deadline.setDate(deadline.getDate() + 180);
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const diffTime = deadline.getTime() - today.getTime();
+      const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      return {
+        Noti: notifDate.toISOString().split("T")[0],
+        Dead: deadline.toISOString().split("T")[0],
+        Remain: daysRemaining.toString(),
+      };
+    } else {
+      return null;
+    }
+  }
+
   function processRows() {
     const table = document.getElementById("bodyTaulaChange");
     if (!table) return;
@@ -130,43 +151,22 @@
       const symbol = row.getAttribute("name");
       if (!symbol) return;
 
-      const notifDate = isNoncompliant(symbol);
-
       let data = GM_getValue(symbol, null);
 
       if (!data) {
-        if (notifDate) {
-          console.log("Symbol:", symbol, "Notification Date:", notifDate);
-          const deadline = new Date(notifDate);
-          deadline.setDate(deadline.getDate() + 180);
-
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          const diffTime = deadline.getTime() - today.getTime();
-          const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-          data = {
-            noncompliant: {
-              Noti: notifDate.toISOString().split("T")[0], // YYYY-MM-DD
-              Dead: deadline.toISOString().split("T")[0],
-              Remain: daysRemaining.toString(),
-            },
-          };
-        } else {
-          data = {
-            noncompliant: {
-              Noti: "no",
-              Dead: "no",
-              Remain: "no",
-            },
-          };
-        }
-
+        data = {
+          noncompliant: addNoncompliant(symbol),
+          daniel: "roig",
+        };
         data = JSON.stringify(data);
-
         GM_setValue(symbol, data);
       }
-      addCell(row, JSON.parse(data)["noncompliant"]);
+      const parsed = JSON.parse(data);
+      Object.keys(parsed).forEach((key) => {
+        if (parsed[key] !== null) {
+          addCell(row, parsed[key]);
+        }
+      });
     });
   }
 
