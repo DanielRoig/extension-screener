@@ -83,20 +83,8 @@
     }
   }
 
-  function getNoncompliantFromStorage() {
-    const stored = GM_getValue("Noncompliant", null);
-    if (stored) {
-      try {
-        return JSON.parse(stored);
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
-
   function isNoncompliant(symbol) {
-    const list = getNoncompliantFromStorage();
+    const list = JSON.parse(GM_getValue("Noncompliant", null));
     if (list && list[symbol]) {
       return new Date(list[symbol]);
     }
@@ -140,7 +128,7 @@
         Remain: daysRemaining.toString(),
       };
     } else {
-      return "       ";
+      return null;
     }
   }
 
@@ -148,29 +136,25 @@
     const table = document.getElementById("bodyTaulaChange");
     if (!table) return;
 
-    const rows = table.querySelectorAll("tr");
-    rows.forEach((row) => {
+    table.querySelectorAll("tr").forEach((row) => {
       if (row.querySelector(".column8-ch")) return;
 
       const symbol = row.getAttribute("name");
       if (!symbol) return;
 
-      let data = GM_getValue(symbol, null);
+      let symbolData = GM_getValue(symbol, null);
 
-      if (!data) {
-        data = {
+      if (!symbolData) {
+        symbolData = JSON.stringify({
           noncompliant: addNoncompliant(symbol),
           daniel: "roig",
-        };
-        data = JSON.stringify(data);
-        GM_setValue(symbol, data);
+        });
+        GM_setValue(symbol, symbolData);
       }
-      const parsed = JSON.parse(data);
-      Object.keys(parsed).forEach((key) => {
-        if (parsed[key] !== null) {
-          addCell(row, parsed[key]);
-        }
-      });
+
+      Object.values(JSON.parse(symbolData))
+        .filter((value) => value !== null)
+        .forEach((value) => addCell(row, value));
     });
   }
 
