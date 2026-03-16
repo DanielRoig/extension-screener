@@ -146,15 +146,19 @@
           const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
           data = {
-            Noti: notifDate.toISOString().split("T")[0], // YYYY-MM-DD
-            Dead: deadline.toISOString().split("T")[0],
-            Remain: daysRemaining.toString(),
+            noncompliant: {
+              Noti: notifDate.toISOString().split("T")[0], // YYYY-MM-DD
+              Dead: deadline.toISOString().split("T")[0],
+              Remain: daysRemaining.toString(),
+            },
           };
         } else {
           data = {
-            Noti: "no",
-            Dead: "no",
-            Remain: "no",
+            noncompliant: {
+              Noti: "no",
+              Dead: "no",
+              Remain: "no",
+            },
           };
         }
 
@@ -162,7 +166,7 @@
 
         GM_setValue(symbol, data);
       }
-      addCell(row, JSON.parse(data));
+      addCell(row, JSON.parse(data)["noncompliant"]);
     });
   }
 
