@@ -1,13 +1,13 @@
 // ==UserScript==
 // @name         Screener Helper
 // @namespace    https://github.com/DanielRoig/screener-extension
-// @version      1.0
+// @version      2.0
 // @description  Añade celdas personalizadas en la tabla de adaytrading.com/screener
 // @author       TU_NOMBRE
 // @match        https://adaytrading.com/screener
-// @grant        GM_xmlhttpRequest
-// @grant        GM_getValue
-// @grant        GM_setValue
+// @grant        GM.xmlHttpRequest
+// @grant        GM.getValue
+// @grant        GM.setValue
 // @connect      api.nasdaq.com
 // @run-at       document-end
 // @downloadURL  https://github.com/DanielRoig/extension-screener/raw/refs/heads/main/screener-helper.user.js
@@ -22,78 +22,83 @@
     NONCOMPLIANT: "Noncompliant",
   };
 
-  // Tipos (simulados en JS)
-  // interface NasdaqResponse { ... }
-  // type NoncompliantList = Record<string, string>;
-
-  // Función para parsear fecha
-  function parseNotificationDate(dateStr) {
-    const [month, day, year] = dateStr.split("/").map(Number);
-    return new Date(year, month - 1, day);
-  }
-
-  // Función para obtener datos de Nasdaq
+  // Función para obtener datos de Nasdaq usando la nueva API
   async function fetchNoncompliantCompanies() {
     try {
-      const response = await new Promise((resolve, reject) => {
-        GM_xmlhttpRequest({
-          method: "GET",
-          url: "https://api.nasdaq.com/api/quote/list-type-extended/listing?queryString=deficient",
-          onload: (res) => {
-            if (res.status >= 200 && res.status < 300) {
-              try {
-                const data = JSON.parse(res.responseText);
-                resolve({ success: true, data });
-              } catch (e) {
-                reject(new Error("Error parsing response"));
-              }
-            } else {
-              reject(new Error(`HTTP error! status: ${res.status}`));
-            }
-          },
-          onerror: (err) => reject(new Error("Network error")),
-        });
+      const response = await GM.xmlHttpRequest({
+        method: "GET",
+        url: "https://api.nasdaq.com/api/quote/list-type-extended/listing?queryString=deficient",
+        responseType: "json",
+        onload: (res) => res,
+        onerror: (err) => {
+          throw new Error("Network error");
+        },
       });
 
-      if (!response.success || !response.data) {
-        return;
-      }
+      if (response.status >= 200 && response.status < 300) {
+        const data = response.response;
 
-      const noncompliantList = {};
+        if (!data || !data.data) {
+          throw new Error("Invalid response format");
+        }
 
-      response.data.data.noncomplaintCompanyList.rows.forEach((row) => {
-        row.companies.forEach((company) => {
-          company.AffectedIssues.forEach((symbol) => {
-            noncompliantList[symbol] = parseNotificationDate(
-              company.NotificationDate,
-            ).toISOString();
+        const noncompliantList = {};
+
+        data.data.noncomplaintCompanyList.rows.forEach((row) => {
+          row.companies.forEach((company) => {
+            company.AffectedIssues.forEach((symbol) => {
+              noncompliantList[symbol] = company.NotificationDate;
+            });
           });
         });
-      });
 
-      // Guardar en GM_setValue en lugar de localStorage
-      GM_setValue(STORAGE_KEYS.NONCOMPLIANT, JSON.stringify(noncompliantList));
+        // Guardar usando la nueva API
+        await GM.setValue(STORAGE_KEYS.NONCOMPLIANT, noncompliantList);
+      } else {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
     } catch (error) {
       console.error("Error fetching noncompliant companies:", error);
     }
   }
 
-  // Obtener datos del storage
-  function getNoncompliantFromStorage() {
-    const stored = GM_getValue(STORAGE_KEYS.NONCOMPLIANT, null);
-    if (stored) {
-      return JSON.parse(stored);
+  // Obtener datos del storage usando la nueva API
+  async function getNoncompliantFromStorage() {
+    try {
+      const stored = await GM.getValue(STORAGE_KEYS.NONCOMPLIANT, null);
+      return stored;
+    } catch (error) {
+      console.error("Error reading from storage:", error);
+      return null;
     }
-    return null;
   }
 
   // Verificar si es noncompliant
-  function isNoncompliant(symbol) {
-    const list = getNoncompliantFromStorage();
+  async function isNoncompliant(symbol) {
+    const list = await getNoncompliantFromStorage();
     if (list && list[symbol]) {
       return new Date(list[symbol]);
     }
     return null;
+  }
+
+  // Obtener valor de una acción específica
+  async function getStockValue(symbol) {
+    try {
+      return await GM.getValue(symbol, null);
+    } catch (error) {
+      console.error(`Error getting value for ${symbol}:`, error);
+      return null;
+    }
+  }
+
+  // Guardar valor de una acción específica
+  async function setStockValue(symbol, value) {
+    try {
+      await GM.setValue(symbol, value);
+    } catch (error) {
+      console.error(`Error setting value for ${symbol}:`, error);
+    }
   }
 
   // Añadir celda a la fila
@@ -112,20 +117,22 @@
     row.appendChild(celda);
   }
 
-  // Procesar filas
-  function processRows() {
-    document.querySelectorAll("#bodyTaulaChange tr").forEach((row) => {
+  // Procesar filas (ahora async)
+  async function processRows() {
+    const rows = document.querySelectorAll("#bodyTaulaChange tr");
+
+    for (const row of rows) {
       if (!row.querySelector(".column8-ch")) {
         const name = row.getAttribute("name");
         if (!name) {
-          return;
+          continue;
         }
 
-        let value = GM_getValue(name, null);
+        let value = await getStockValue(name);
         let newValue;
 
         if (value === null) {
-          const noncompliantDate = isNoncompliant(name);
+          const noncompliantDate = await isNoncompliant(name);
           if (noncompliantDate) {
             const deadlineDate = new Date(noncompliantDate);
             deadlineDate.setDate(deadlineDate.getDate() + 180);
@@ -148,31 +155,40 @@
               Remain: null,
             };
           }
-          GM_setValue(name, JSON.stringify(newValue));
+          await setStockValue(name, newValue);
         } else {
-          newValue = JSON.parse(value);
+          newValue = value;
         }
 
         addCell(row, newValue);
       }
-    });
+    }
   }
 
   // Iniciar observer
   function startObserver() {
     const tabla = document.getElementById("bodyTaulaChange");
     if (tabla) {
-      const observador = new MutationObserver(processRows);
-      observador.observe(tabla, { childList: true, subtree: true });
+      // Procesar filas iniciales
+      processRows().catch(console.error);
 
-      processRows();
+      // Configurar observer para cambios futuros
+      const observador = new MutationObserver(() => {
+        processRows().catch(console.error);
+      });
+      observador.observe(tabla, { childList: true, subtree: true });
     } else {
       setTimeout(startObserver, 2000);
     }
   }
 
-  // Limpiar datos antiguos (opcional)
-  // No podemos usar localStorage.clear() fácilmente, así que omitimos o implementamos limpieza selectiva
+  // Función para limpiar datos antiguos (opcional)
+  async function cleanupOldData() {
+    // Esta función requeriría listar todas las keys, lo cual no es posible
+    // directamente con la API de GM. Se puede implementar un sistema de
+    // limpieza basado en fechas si se guarda un timestamp.
+    console.log("Cleanup function - implement if needed");
+  }
 
   // Inicialización
   if (document.readyState === "loading") {
