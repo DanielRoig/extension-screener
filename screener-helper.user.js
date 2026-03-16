@@ -11,6 +11,7 @@
 // @grant        GM_deleteValue
 // @grant        GM_listValues
 // @connect      api.nasdaq.com
+// @connect      api.dilutiontracker.com
 // @run-at       document-end
 // @downloadURL  https://github.com/DanielRoig/extension-screener/raw/refs/heads/main/screener-helper.user.js
 // @updateURL    https://github.com/DanielRoig/extension-screener/raw/refs/heads/main/screener-helper.user.js
@@ -18,6 +19,7 @@
 
 (function () {
   "use strict";
+
   function resetStorage() {
     GM_listValues().forEach((key) => GM_deleteValue(key));
   }
@@ -41,6 +43,25 @@
         },
         onerror: function () {
           reject(new Error("Network error"));
+        },
+      });
+    });
+  }
+
+  function fetchDilutionTrackerData(symbol) {
+    return new Promise((resolve) => {
+      GM_xmlhttpRequest({
+        method: "GET",
+        url: `https://api.dilutiontracker.com/v1/getCompanyProfile?ticker=${symbol}`,
+        onload: function (res) {
+          if (res.status === 404) {
+            resolve("no");
+          } else {
+            resolve("si");
+          }
+        },
+        onerror: function () {
+          resolve("error");
         },
       });
     });
@@ -91,10 +112,9 @@
     return null;
   }
 
-  function addCell(row, data) {
+  function addCell(row, data, appendToStart = false) {
     const cell = document.createElement("td");
     cell.className = "cell100 column8-ch smallPadding";
-
     if (typeof data === "object") {
       const entries = Object.entries(data);
       entries.forEach(([key, value], index) => {
@@ -107,13 +127,16 @@
       cell.appendChild(document.createTextNode(data));
     }
 
-    row.appendChild(cell);
+    if (appendToStart) {
+      row.insertBefore(cell, row.firstChild);
+    } else {
+      row.appendChild(cell);
+    }
   }
 
   function addNoncompliant(symbol) {
     const notifDate = isNoncompliant(symbol);
     if (notifDate) {
-      console.log("Symbol:", symbol, "Notification Date:", notifDate);
       const deadline = new Date(notifDate);
       deadline.setDate(deadline.getDate() + 180);
 
@@ -132,30 +155,41 @@
     }
   }
 
-  function processRows() {
+  async function processRows() {
     const table = document.getElementById("bodyTaulaChange");
     if (!table) return;
 
-    table.querySelectorAll("tr").forEach((row) => {
-      if (row.querySelector(".column8-ch")) return;
+    for (const row of table.querySelectorAll("tr")) {
+      if (row.querySelector(".column8-ch")) continue;
 
       const symbol = row.getAttribute("name");
-      if (!symbol) return;
+      if (!symbol) continue;
 
       let symbolData = GM_getValue(symbol, null);
 
       if (!symbolData) {
-        symbolData = JSON.stringify({
-          noncompliant: addNoncompliant(symbol),
-          daniel: "roig",
-        });
-        GM_setValue(symbol, symbolData);
+        try {
+          const dilutionResult = await fetchDilutionTrackerData(symbol);
+
+          symbolData = JSON.stringify({
+            noncompliant: addNoncompliant(symbol),
+            daniel: "roig",
+            dilutionTracker: dilutionResult,
+          });
+
+          GM_setValue(symbol, symbolData);
+        } catch (error) {
+          console.error(`Error fetching data for ${symbol}:`, error);
+          continue;
+        }
       }
 
-      Object.values(JSON.parse(symbolData))
-        .filter((value) => value !== null)
-        .forEach((value) => addCell(row, value));
-    });
+      const parsedData = JSON.parse(symbolData);
+      if (parsedData["noncompliant"] != null) {
+        addCell(row, parsedData["noncompliant"]);
+      }
+      addCell(row, parsedData["dilutionTracker"], true);
+    }
   }
 
   function startObserver() {
@@ -165,7 +199,10 @@
       return;
     }
 
-    const observer = new MutationObserver(processRows);
+    const observer = new MutationObserver(() => {
+      processRows();
+    });
+
     observer.observe(table, { childList: true, subtree: true });
 
     processRows();
