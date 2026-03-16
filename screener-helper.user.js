@@ -8,6 +8,8 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_deleteValue
+// @grant        GM_listValues
 // @connect      api.nasdaq.com
 // @run-at       document-end
 // @downloadURL  https://github.com/DanielRoig/extension-screener/raw/refs/heads/main/screener-helper.user.js
@@ -21,6 +23,16 @@
   // Types (for clarity)
   // ----------------------------------------------------------------------
   /** @typedef {Record<string, string>} NoncompliantList */
+
+  // ----------------------------------------------------------------------
+  // Storage reset
+  // ----------------------------------------------------------------------
+  /**
+   * Clears all values stored by this script in Tampermonkey storage.
+   */
+  function resetStorage() {
+    GM_listValues().forEach((key) => GM_deleteValue(key));
+  }
 
   // ----------------------------------------------------------------------
   // API fetch (replaces background.ts + chrome.runtime.sendMessage)
@@ -173,31 +185,38 @@
       if (!symbol) return;
 
       const notifDate = isNoncompliant(symbol);
-      let data;
 
-      if (notifDate) {
-        const deadline = new Date(notifDate);
-        deadline.setDate(deadline.getDate() + 180);
+      let data = GM_getValue(symbol, null);
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const diffTime = deadline.getTime() - today.getTime();
-        const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      if (!data) {
+        if (notifDate) {
+          console.log("Symbol:", symbol, "Notification Date:", notifDate);
+          const deadline = new Date(notifDate);
+          deadline.setDate(deadline.getDate() + 180);
 
-        data = {
-          Noti: notifDate.toISOString().split("T")[0], // YYYY-MM-DD
-          Dead: deadline.toISOString().split("T")[0],
-          Remain: daysRemaining.toString(),
-        };
-      } else {
-        data = {
-          Noti: null,
-          Dead: null,
-          Remain: null,
-        };
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const diffTime = deadline.getTime() - today.getTime();
+          const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+          data = {
+            Noti: notifDate.toISOString().split("T")[0], // YYYY-MM-DD
+            Dead: deadline.toISOString().split("T")[0],
+            Remain: daysRemaining.toString(),
+          };
+        } else {
+          data = {
+            Noti: "no",
+            Dead: "no",
+            Remain: "no",
+          };
+        }
+
+        data = JSON.stringify(data);
+
+        GM_setValue(symbol, data);
       }
-
-      addCell(row, data);
+      addCell(row, JSON.parse(data));
     });
   }
 
@@ -226,10 +245,12 @@
   // Ensure the noncompliant list is fetched before we start observing
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", async () => {
+      resetStorage();
       await fetchNoncompliantCompanies();
       startObserver();
     });
   } else {
+    resetStorage();
     fetchNoncompliantCompanies().then(() => startObserver());
   }
 
