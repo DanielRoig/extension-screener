@@ -55,9 +55,9 @@
         url: `https://api.dilutiontracker.com/v1/getCompanyProfile?ticker=${symbol}`,
         onload: function (res) {
           if (res.status === 404) {
-            resolve("no");
+            resolve(false);
           } else {
-            resolve("si");
+            resolve(true);
           }
         },
         onerror: function () {
@@ -185,10 +185,14 @@
       }
 
       const parsedData = JSON.parse(symbolData);
+      if (parsedData["dilutionTracker"] == false) {
+        row.remove();
+        continue;
+      }
+
       if (parsedData["noncompliant"] != null) {
         addCell(row, parsedData["noncompliant"]);
       }
-      addCell(row, parsedData["dilutionTracker"], true);
     }
   }
 
