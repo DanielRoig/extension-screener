@@ -107,13 +107,17 @@
     const cell = document.createElement("td");
     cell.className = "cell100 column8-ch smallPadding";
 
-    const entries = Object.entries(data);
-    entries.forEach(([key, value], index) => {
-      cell.appendChild(document.createTextNode(`${key}: ${value}`));
-      if (index < entries.length - 1) {
-        cell.appendChild(document.createElement("br"));
-      }
-    });
+    if (typeof data === "object") {
+      const entries = Object.entries(data);
+      entries.forEach(([key, value], index) => {
+        cell.appendChild(document.createTextNode(`${key}: ${value}`));
+        if (index < entries.length - 1) {
+          cell.appendChild(document.createElement("br"));
+        }
+      });
+    } else {
+      cell.appendChild(document.createTextNode(data));
+    }
 
     row.appendChild(cell);
   }
@@ -136,7 +140,7 @@
         Remain: daysRemaining.toString(),
       };
     } else {
-      return null;
+      return "       ";
     }
   }
 
