@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Screener Helper
-// @namespace    https://github.com/TU_USUARIO/screener-helper
+// @namespace    https://github.com/DanielRoig/screener-helper
 // @version      1.0
 // @description  Añade celdas personalizadas en la tabla de adaytrading.com/screener
 // @author       TU_NOMBRE
@@ -10,8 +10,8 @@
 // @grant        GM_setValue
 // @connect      api.nasdaq.com
 // @run-at       document-end
-// @downloadURL  https://github.com/TU_USUARIO/screener-helper/raw/main/screener-helper.user.js
-// @updateURL    https://github.com/TU_USUARIO/screener-helper/raw/main/screener-helper.user.js
+// @downloadURL  https://github.com/DanielRoig/screener-helper/raw/main/screener-helper.user.js
+// @updateURL    https://github.com/DanielRoig/screener-helper/raw/main/screener-helper.user.js
 // ==/UserScript==
 
 (function () {
