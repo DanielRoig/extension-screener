@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Screener Helper
 // @namespace    https://github.com/DanielRoig/screener-extension
-// @version      2.0
+// @version      3.0
 // @description  Añade celdas personalizadas en la tabla de adaytrading.com/screener
 // @author       Daniel Roig
 // @match        https://adaytrading.com/screener
@@ -196,6 +196,28 @@
     }
   }
 
+  function processPositionsData() {
+    const positionsDiv = document.getElementById("positionsData");
+    if (!positionsDiv) return;
+
+    const table = positionsDiv.querySelector("table");
+    if (!table) return;
+
+    const tbody = table.querySelector("tbody");
+    if (!tbody) return;
+
+    const rows = tbody.querySelectorAll("tr");
+    rows.forEach((row) => {
+      const td = row.querySelector("td");
+      if (td && !td.hasAttribute("onclick")) {
+        const symbolText = td.textContent.trim().split(".")[0];
+
+        const originalContent = td.innerHTML;
+        td.innerHTML = `<span name="${symbolText}" style="cursor:pointer;" onclick="newtab(this)">${originalContent}</span>`;
+      }
+    });
+  }
+
   function startObserver() {
     const table = document.getElementById("bodyTaulaChange");
     if (!table) {
@@ -205,6 +227,7 @@
 
     const observer = new MutationObserver(() => {
       processRows();
+      processPositionsData();
     });
 
     observer.observe(table, { childList: true, subtree: true });
